@@ -230,7 +230,7 @@ android {
         buildConfigField("String", "APP_APPLICATION_ID", "\"me.him188.ani\"")
     }
     buildTypes.getByName("debug") {
-        buildConfigField("String", "APP_APPLICATION_ID", "\"me.him188.ani.debug2\"")
+        buildConfigField("String", "APP_APPLICATION_ID", "\"me.44c38b8.ani.noads\"")
     }
     buildFeatures {
         compose = true
