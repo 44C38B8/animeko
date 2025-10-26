@@ -39,6 +39,7 @@ fun SubjectRecommendationCard(
     item: SubjectRecommendation,
     modifier: Modifier = Modifier,
 ) {
+    if(item.desc2.contains("广告")) return
     Surface(
         onClick,
         modifier,

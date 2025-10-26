@@ -83,6 +83,7 @@ tasks.matching {
             || (it.name.startsWith("generate") && it.name.endsWith("Resources"))
             || it.name.startsWith("extractDeepLinks")
             || (it.name.startsWith("map") && it.name.endsWith("SourceSetPaths")) // mapReleaseSourceSetPaths
+            || it.name.contains("NavigationResources")
 }.configureEach {
     dependsOn(populateStringsLocales)
 }
