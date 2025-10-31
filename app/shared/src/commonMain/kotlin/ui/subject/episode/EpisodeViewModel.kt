@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -37,6 +38,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -667,7 +669,7 @@ class EpisodeViewModel(
             autoSkipRepository.rulesFlow(session.episodeId)
         }.combine(
             player.mediaProperties.mapNotNull { it?.durationMillis?.milliseconds },
-        ) { times, videoLength ->
+        ) { millisecondTimes, videoLength ->
             val durationMillis = when {
                 videoLength > 20.minutes -> 85_000L
                 videoLength > 10.minutes -> 55_000L
@@ -676,22 +678,36 @@ class EpisodeViewModel(
             if (durationMillis == 0L) {
                 emptyList()
             } else {
-                times.map { t ->
+                millisecondTimes.mapIndexed { index, t ->
+                    val name = if (millisecondTimes.size == 2) {
+                        val anotherIndex = if (index == 0) 1 else 0
+                        if (t <= millisecondTimes[anotherIndex]) {
+                            "OP"
+                        } else {
+                            "ED"
+                        }
+                    } else {
+                        "Ch ${index + 1}"
+                    }
                     Chapter(
-                        "AutoSkip",
+                        name,
                         durationMillis,
-                        t.toLong() * 1000L,
+                        t,
                     )
                 }
             }
+        }.catch {
+            logger.warn(it) { "Failed to fetch AutoSkip chapters" }
         }
 
-    private val enableAutoSkip = false
 
     private val combinedChaptersFlow: Flow<List<Chapter>> =
         combine(
             (player.chapters ?: flowOf(emptyList())),
-            if (enableAutoSkip) autoSkipChaptersFlow else flowOf(emptyList()),
+            flow {
+                emit(emptyList()) // 先给个空列表, 避免刚开始时因为等待网络而没有进度
+                emitAll(autoSkipChaptersFlow)
+            },
         ) { a, b -> if (b.isEmpty()) a else (a + b) }
 
     // Chapters to be displayed on progress slider (merged with AutoSkip rules)
@@ -700,7 +716,9 @@ class EpisodeViewModel(
     val playerSkipOpEdState: PlayerSkipOpEdState = PlayerSkipOpEdState(
         chapters = combinedChaptersFlow.produceState(emptyList()),
         onSkip = {
-            player.seekTo(it)
+            launchInBackground(Dispatchers.Main) {
+                player.seekTo(it)
+            }
         },
         videoLength = player.mediaProperties.mapNotNull { it?.durationMillis?.milliseconds }
             .produceState(0.milliseconds),
@@ -925,7 +943,7 @@ class EpisodeViewModel(
                 logger.warn { "Refusing to report skip 85 at invalid time ${timeSeconds}s" }
                 return@launchInBackground
             }
-            autoSkipRepository.reportSkip(episodeId, mediaSourceId, timeSeconds)
+            autoSkipRepository.reportSkip(episodeId, mediaSourceId, timeSeconds, currentPositionMillis)
         }
     }
 
